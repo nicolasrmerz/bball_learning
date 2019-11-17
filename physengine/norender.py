@@ -1,5 +1,5 @@
 import pymunk
-from math import cos, sin
+from math import cos, sin, radians
 import random
 
 
@@ -14,18 +14,31 @@ class PymunkSpace():
         self.winwidth = winwidth
         self.winheight = winheight
         # Define some constant constraints for the system
-        self.MIN_NET_X = self.winwidth / 2 + 30
-        self.MAX_NET_X = self.winwidth - 50
+        self.COORD_STEP_SIZE = 50
+        #self.MIN_NET_X = self.winwidth / 2 + self.COORD_STEP_SIZE
+        #self.MAX_NET_X = self.winwidth - 50
+        self.MIN_NET_X = self.winwidth * (3/4)
+        self.MAX_NET_X = self.MIN_NET_X # For now, don't allow net to vary in x direction
         self.MIN_NET_Y = 200
         self.MAX_NET_Y = self.winheight - 100
         
-        self.MIN_BALL_X = 50
-        self.MAX_BALL_X = self.winwidth / 2 - 30
+        self.MIN_BALL_X = 0 + self.COORD_STEP_SIZE
+        self.MAX_BALL_X = self.winwidth / 2 - self.COORD_STEP_SIZE
         self.STARTING_BALL_Y = 200
+        
+        self.MIN_SHOT_VEL = 100
+        self.MAX_SHOT_VEL = 1000
+        self.VELOCITY_STEP_SIZE = 20
+        
+        self.MIN_SHOT_ANGLE = 0
+        self.MAX_SHOT_ANGLE = 90
+        self.ANGLE_STEP_SIZE = 5
         
         self.WIND_FORCE = 200
         
         self.DEFAULT_GRAVITY = -900
+        
+        self.MAX_STEPS = 250
         
         self.reset_space(True)
         
@@ -61,16 +74,22 @@ class PymunkSpace():
         self.handler.separate = self.coll_separate
         self.ball_missed = False
         self.ball_hit = False
+        self.steps_taken = 0
         
         if doRandomize:
-            self.initial_basketball_x = random.randrange(self.MIN_BALL_X, self.MAX_BALL_X, 10)
+            self.initial_basketball_x = random.randrange(self.MIN_BALL_X, self.MAX_BALL_X, self.COORD_STEP_SIZE)
+            #self.initial_basketball_x = self.MIN_BALL_X
             # Basketball will always start at the same height
             self.initial_basketball_y = self.STARTING_BALL_Y
             
-            self.initial_hoop_x = random.randrange(self.MIN_NET_X, self.MAX_NET_X, 10)
-            self.initial_hoop_y = random.randrange(self.MIN_NET_Y, self.MAX_NET_Y, 10)
+            if self.MIN_NET_X == self.MAX_NET_X:
+                self.initial_hoop_x = self.MIN_NET_X
+            else:
+                self.initial_hoop_x = random.randrange(self.MIN_NET_X, self.MAX_NET_X, self.COORD_STEP_SIZE)
+            self.initial_hoop_y = random.randrange(self.MIN_NET_Y, self.MAX_NET_Y, self.COORD_STEP_SIZE)
             
             wind_angle = random.randrange(0, 360, 15)
+            #wind_angle = 180
             self.wind_x, self.wind_y = self.get_x_y(self.WIND_FORCE, wind_angle)
 
 
@@ -114,8 +133,8 @@ class PymunkSpace():
         pass
     
     def get_x_y(self, velocity, angle):
-        vel_x = velocity * cos(angle)
-        vel_y = velocity * sin(angle)
+        vel_x = velocity * cos(radians(angle))
+        vel_y = velocity * sin(radians(angle))
         return vel_x, vel_y
     
     def generate_net(self, ball_radius, netx, nety):
@@ -173,22 +192,72 @@ class PymunkSpace():
         posx = self.basketball_body.position.x
         posy = self.basketball_body.position.y
         # Don't want to be able to shoot past the halfway point of the screen
-        if (posx >= self.winwidth/2 and dir == "r") or (posx <= 0 and dir == "l"):
+        if (posx >= self.MAX_BALL_X and dir == "r") or (posx <= self.MIN_BALL_X and dir == "l"):
             return
 
         self.space.remove(self.basketball_body)
         self.space.remove(self.basketball_shape)
         
         if dir == "r":
-            self.basketball_body.position = posx + 10, posy
+            self.basketball_body.position = posx + self.COORD_STEP_SIZE, posy
         else:
-            self.basketball_body.position = posx - 10, posy
+            self.basketball_body.position = posx - self.COORD_STEP_SIZE, posy
 
         self.space.add(self.basketball_body)
         self.space.add(self.basketball_shape)    
             
     def getCoords(self):
-        return self.basketball_body.position.x, self.basketball_body.position.y, self.netx, self.nety
+        return int(self.netx), int(self.nety), int(self.basketball_body.position.x)
+        
+    def getStateSpace(self):
+        # Need to add 1 to each of these; without adding +1, it only represents the maximum possible index, not the actual size of the dimension
+        return [
+            int((self.MAX_NET_X - self.MIN_NET_X) / self.COORD_STEP_SIZE) + 1, # net_x - This is how many starting spots available for x coord of net
+            int((self.MAX_NET_Y - self.MIN_NET_Y) / self.COORD_STEP_SIZE) + 1, # net_y - This is how many starting spots available for y coord of net
+            int((self.MAX_BALL_X - self.MIN_BALL_X) / self.COORD_STEP_SIZE) + 1 # ball_x - This is how many starting spots available for ball; no variance in ball starting y is needed
+        ]
+        
+    # This function is a bit weird and works differently than getStateSpace
+    # The state space is completely multiplicative - for each m states in net_x, there are n states in net_y, and for each
+    # of those n states in net_y, there's l ball-x states.
+    # Equivalently, in getActionSpace, there would be 3 actions (left, right and shoot), and for each of those a set of velocity states,
+    # and for each of those velocities a set of angle states. This is not true though, as only shoot should have velocities and angles
+    # Therefore, to reduce the memory requirement, this list will be one dimensional; 
+    # the first two indexes will be for left/right, and the rest of the
+    # list will be for shoot/velocity/angles (these will be mapped to a unique index)
+    def getActionSpace(self):
+        return int(2 + ((self.MAX_SHOT_VEL - self.MIN_SHOT_VEL) / self.VELOCITY_STEP_SIZE) * ((self.MAX_SHOT_ANGLE - self.MIN_SHOT_ANGLE) / self.ANGLE_STEP_SIZE)) + 1
+            
+    def mapValsToState(self, net_x, net_y, ball_x):
+        #print("net_x: ", net_x, ", net_y: ", net_y, ", ball_x: ", ball_x)
+        #print("net_x_idx: ", (net_x - self.MIN_NET_X)/self.COORD_STEP_SIZE, ", net_y_idx: ", (net_y - self.MIN_NET_Y)/self.COORD_STEP_SIZE, ", ball_x_idx: ", (ball_x - self.MIN_BALL_X)/self.COORD_STEP_SIZE)
+        return int((net_x - self.MIN_NET_X)/self.COORD_STEP_SIZE), int((net_y - self.MIN_NET_Y)/self.COORD_STEP_SIZE), int((ball_x - self.MIN_BALL_X)/self.COORD_STEP_SIZE)
+        
+    def mapValsToAction(self, action):
+        if action.action_type == "l":
+            return 0
+        elif action.action_type == "r":
+            return 1
+        else:
+            # Always add 2, because 0 and 1 are reserved for left and right
+            velocityidx = ((action.velocity - self.MIN_SHOT_VEL) / self.VELOCITY_STEP_SIZE) * ((self.MAX_SHOT_ANGLE - self.MIN_SHOT_ANGLE) / self.ANGLE_STEP_SIZE)
+            angleidx = ((action.angle - self.MIN_SHOT_ANGLE) / self.ANGLE_STEP_SIZE)
+            return int(2 + velocityidx + angleidx)
+            
+    def mapActionToVals(self, actionidx):
+        if actionidx == 0:
+            return Action("l", 0, 0)
+        elif actionidx == 1:
+            return Action("r", 0, 0)
+        else:
+            actionidx -= 2 # first get rid of the left and right actions
+            angleval = actionidx % ((self.MAX_SHOT_ANGLE - self.MIN_SHOT_ANGLE) / self.ANGLE_STEP_SIZE)
+            actionidx -= angleval # subtract out the angle index to get the velocity index
+            velocityval = actionidx / ((self.MAX_SHOT_ANGLE - self.MIN_SHOT_ANGLE) / self.ANGLE_STEP_SIZE)
+            velocityval = velocityval * self.VELOCITY_STEP_SIZE + self.MIN_SHOT_VEL
+            angleval = (angleval * self.ANGLE_STEP_SIZE) + self.MIN_SHOT_ANGLE
+            return Action("shoot", velocityval, angleval)
+
         
 class PymunkSpaceNoRender(PymunkSpace):
     def __init__ (self, winwidth, winheight):
@@ -198,6 +267,11 @@ class PymunkSpaceNoRender(PymunkSpace):
         super().shoot(action)
         while (not self.ball_hit) and (not self.ball_missed):
             self.no_render_update(dt)
+            self.steps_taken += 1
+            # Make sure the ball isn't stuck
+            if self.steps_taken > self.MAX_STEPS:
+                self.reset_space(False)
+                return False
         if self.ball_hit:
             # If the ball hits, reset the space and randomize ball and hoop locations
             self.reset_space(True)
@@ -209,6 +283,7 @@ class PymunkSpaceNoRender(PymunkSpace):
         
     def no_render_update(self, dt):
         self.space.step(dt)
+        
         self.check_bounds()
 
 

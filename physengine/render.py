@@ -24,7 +24,6 @@ class PhysWin(pyglet.window.Window):
         self.background_sprite = pyglet.sprite.Sprite(background, x=0, y=0)
         pyglet.clock.schedule_interval(self.update, 1.0/60)
         self.doingAction = False
-        #pyglet.clock.schedule_interval(self.check_queue, 5)
 
         hoop_img = pyglet.image.load(dirname + "/../resource/hoop_resized.png")
         hoop_img.anchor_x = hoop_img.width // 2 - 1
@@ -70,6 +69,13 @@ class PhysWin(pyglet.window.Window):
 
         self.pmSpace.space.step(dt)
         self.check_bounds()
+        # Have a check to make sure the ball's not stuck
+        if self.doingAction:
+            self.pmSpace.steps_taken += 1
+            if self.pmSpace.steps_taken > self.pmSpace.MAX_STEPS:
+                self.reset_space(False)
+                self.doingAction = False
+                done_queue.put(False)
         self.basketball_sprite.update(self.pmSpace.basketball_body.position.x, self.pmSpace.basketball_body.position.y, degrees(-self.pmSpace.basketball_body.angle))
         if self.pmSpace.ball_hit:
             self.reset_space(True)
@@ -90,6 +96,21 @@ class PhysWin(pyglet.window.Window):
         
     def getCoords(self):
         return self.pmSpace.getCoords()
+        
+    def getStateSpace(self):
+        return self.pmSpace.getStateSpace()
+        
+    def getActionSpace(self):
+        return self.pmSpace.getActionSpace()
+            
+    def mapValsToState(self, net_x, net_y, ball_x):
+        return self.pmSpace.mapValsToState(net_x, net_y, ball_x)
+        
+    def mapValsToAction(self, action):
+        return self.pmSpace.mapValsToAction(action)
+    
+    def mapActionToVals(self, actionidx):
+        return self.pmSpace.mapActionToVals(actionidx)
 
 def test():
     time.sleep(2)
