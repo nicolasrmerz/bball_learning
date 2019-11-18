@@ -6,6 +6,7 @@ import pyglet
 import time
 import random
 import collections 
+import pickle
 
 
 class QLearn():
@@ -23,7 +24,7 @@ class QLearn():
         
     def getMaxAction(self, actions):
         max_value = max(actions)
-        max_inds = [i for i, x in enumerate(actions) if x == max_value]
+        #max_inds = [i for i, x in enumerate(actions) if x == max_value]
         return actions.index(max_value)
         
     def getUpdate(self, reward, action_taken_val, actions_newstate):
@@ -33,12 +34,12 @@ class TabModel():
     def __init__(self, model_type, state_space, action_space):
         # This will be used to select which algorithm to use
         if model_type is "qlearn":
-            self.model_type = QLearn(0.05, 0.9, 0.1)
+            self.model_type = QLearn(0.025, 0.75, 0.1)
         self.state_space = state_space
         self.action_space = action_space
-        print(self.state_space)
         # Initialize table for all states/actions, initialize to 0
         self.table = [[[[0 for x in range(action_space)] for x in range(state_space[2])] for x in range(state_space[1])] for x in range(state_space[0])]
+        #self.loadTable("testtable.pkl")
         print("Table dimensions: ", len(self.table), " x ", len(self.table[0]), " x ", len(self.table[0][0]), " x ", len(self.table[0][0][0]))
         
     def getAction(self):
@@ -48,13 +49,18 @@ class TabModel():
         return self.table[state[0]][state[1]][state[2]]
         
     def setState(self, state):
-        print(state)
         self.state = state
         
     def update(self, reward, action_taken, newstate):
         action_taken_val = self.getActionsForState(self.state)[action_taken]
         self.table[self.state[0]][self.state[1]][self.state[2]][action_taken] += self.model_type.getUpdate(reward, action_taken_val, self.getActionsForState(newstate))
         self.state = newstate
+        
+    def saveTable(self, filename):
+        pickle.dump(self.table, open(filename, "wb"))
+    
+    def loadTable(self, filename):
+        self.table = pickle.load(open(filename, "rb"))
 
 class Learner():
     def __init__(self, winwidth, winheight, rendered):
@@ -87,26 +93,28 @@ class Learner():
             # Get the initial S
             net_x, net_y, ball_x = self.engine.getCoords()
             self.model.setState(self.engine.mapValsToState(net_x, net_y, ball_x))
-            while True:
+            while self.ep_count < 500000:
                 self.control_norendered()
+            self.model.saveTable("testtable.pkl")
         
     def control_rendered(self):
         # This is blocking, so the thread will wait until the Physwin is done initializing
         render.done_queue.get()
         # Get the initial S
+        print("HERE")
         net_x, net_y, ball_x = self.engine.getCoords()
         self.model.setState(self.engine.mapValsToState(net_x, net_y, ball_x))
         while True:
             actionidx = self.model.getAction()
             action = self.engine.mapActionToVals(actionidx)
             render.job_queue.put(action)
-            done = render.done_queue.get()
+            missed_by = render.done_queue.get()
             reward = 0
             if action.action_type == "shoot":
-                if done:
+                if missed_by is 0:
                     reward = 1
                 else:
-                    reward = -1
+                    reward = -missed_by
             net_x, net_y, ball_x = self.engine.getCoords()
             self.model.update(reward, actionidx, self.engine.mapValsToState(net_x, net_y, ball_x))
 
@@ -116,18 +124,23 @@ class Learner():
         action = self.engine.mapActionToVals(actionidx)
         if action.action_type == "shoot":
             #print("Shooting ", action.velocity, " at angle ", action.angle)
-            made_basket = self.engine.shoot(action, self.dt)
-            if made_basket:
+            missed_by = self.engine.shoot(action, self.dt)
+            if missed_by is 0:
                 reward = 1
-                print("Basket made!")
-                self.last10count.popleft()
-                self.last10count.append(self.shot_count)
-                avg_shot_count = sum(self.last10count)/len(self.last10count)
-                print("Average of shots per episode in last 10 episodes: ", avg_shot_count)
+                #print("Basket made!")
+                #self.last10count.popleft()
+                #self.last10count.append(self.shot_count)
+                #avg_shot_count = sum(self.last10count)/len(self.last10count)
+                #print("Average of shots per episode in last 10 episodes: ", avg_shot_count)
                 self.shot_count = 0
+                self.ep_count += 1
+                if self.ep_count % 100 is 0:
+                    print("Episode ", self.ep_count)
+
                 
             else:
-                reward = -1
+                # Make this negative, as a miss should be a negative reward
+                reward = -missed_by
                 #print("Shot count: " , self.shot_count)
                 self.shot_count += 1
             net_x, net_y, ball_x = self.engine.getCoords()

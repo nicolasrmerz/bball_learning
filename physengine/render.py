@@ -75,20 +75,25 @@ class PhysWin(pyglet.window.Window):
             if self.pmSpace.steps_taken > self.pmSpace.MAX_STEPS:
                 self.reset_space(False)
                 self.doingAction = False
-                done_queue.put(False)
+                done_queue.put(1)
         self.basketball_sprite.update(self.pmSpace.basketball_body.position.x, self.pmSpace.basketball_body.position.y, degrees(-self.pmSpace.basketball_body.angle))
         if self.pmSpace.ball_hit:
             self.reset_space(True)
             self.doingAction = False
-            done_queue.put(True)
+            done_queue.put(0)
         if self.pmSpace.ball_missed:
             # Reset the space but don't move the position of the ball or the hoop
+            missed_by = self.pmSpace.ball_missed_by
+            print("MISSED BY: ", missed_by)
             self.reset_space(False)
             self.doingAction = False
-            done_queue.put(False)
+            done_queue.put(missed_by)
             
     def shoot(self, action):
         self.pmSpace.shoot(action)
+        
+    def getMissedBy(self):
+        return self.pmSpace.getMissedBy()
             
     def move(self, dir):
         self.pmSpace.move(dir)

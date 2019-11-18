@@ -75,6 +75,7 @@ class PymunkSpace():
         self.ball_missed = False
         self.ball_hit = False
         self.steps_taken = 0
+        self.ball_missed_by = 1
         
         if doRandomize:
             self.initial_basketball_x = random.randrange(self.MIN_BALL_X, self.MAX_BALL_X, self.COORD_STEP_SIZE)
@@ -165,10 +166,24 @@ class PymunkSpace():
         self.backboard_body, self.backboard_shape = self.create_segment(netx + rim_radius + connector_length, nety, netx + rim_radius + connector_length, nety + backboard_height, "backboard", backboard_thickness)
 
         
+    #def check_bounds(self):
+    #    if(self.basketball_body.position.x > self.rim1_body.position.x and self.basketball_body.position.x < self.rim2_body.position.x 
+    #        and self.basketball_body.position.y < self.rim1_body.position.y + 10 and self.basketball_body.position.y > self.rim1_body.position.y - 10) and self.basketball_body.velocity.y < 0:
+    #        self.ball_hit = True
+            
     def check_bounds(self):
-        if(self.basketball_body.position.x > self.rim1_body.position.x and self.basketball_body.position.x < self.rim2_body.position.x 
-            and self.basketball_body.position.y < self.rim1_body.position.y + 10 and self.basketball_body.position.y > self.rim1_body.position.y - 10) and self.basketball_body.velocity.y < 0:
-            self.ball_hit = True
+        if self.basketball_body.position.y < self.rim1_body.position.y + 10 and self.basketball_body.position.y > self.rim1_body.position.y - 10 and self.basketball_body.velocity.y < 0:
+            if self.basketball_body.position.x > self.rim1_body.position.x and self.basketball_body.position.x < self.rim2_body.position.x:
+                self.ball_hit = True
+            else:
+                self.ball_missed_by = self.normalize(abs(self.basketball_body.position.x - self.rim1_body.position.x))
+                
+    def normalize(self, dist):
+        # Based on normalization formula: (x - xmin)/(xmax - xmin); since xmin is 0, it is simply x/xmax. For simplicity, let xmax be winwidth.
+        return dist/self.winwidth
+        
+    def getMissedBy(self):
+        return self.ball_missed_by
             
     def shoot(self, action):
         velocity = action.velocity
@@ -275,11 +290,12 @@ class PymunkSpaceNoRender(PymunkSpace):
         if self.ball_hit:
             # If the ball hits, reset the space and randomize ball and hoop locations
             self.reset_space(True)
-            return True
+            return 0
         else:
             # If the ball misses, reset to the starting locations but don't randomize locations
+            missed_by = self.ball_missed_by
             self.reset_space(False)
-            return False
+            return missed_by
         
     def no_render_update(self, dt):
         self.space.step(dt)
