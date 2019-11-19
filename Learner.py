@@ -97,8 +97,8 @@ class QLearn(TabModel):
                     self.controller.move(action.action_type)
                 else:
                     self.engine.move(action.action_type)
-                # Reward of 0 for a movement
-                reward = 0
+                # Reward of -0.1 for movement
+                reward = -0.1
             
             new_state = self.getState()
             self.update(reward, actionidx, action_taken_val, max(self.getActionsForState(new_state)))
@@ -125,8 +125,8 @@ class Sarsa(TabModel):
                     self.controller.move(action.action_type)
                 else:
                     self.engine.move(action.action_type)
-                # Reward of 0 for a movement
-                reward = 0
+                # Reward of -0.1 for movement
+                reward = -0.1
             
             new_state = self.getState()
             new_actionidx = self.getAction(new_state)

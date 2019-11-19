@@ -34,7 +34,7 @@ class PymunkSpace():
         self.MAX_SHOT_ANGLE = 90
         self.ANGLE_STEP_SIZE = 5
         
-        self.WIND_FORCE = 200
+        self.WIND_FORCE = 150
         
         self.DEFAULT_GRAVITY = -900
         
