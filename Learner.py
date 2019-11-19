@@ -1,4 +1,3 @@
-from physengine import render
 from physengine import norender
 import matplotlib.pyplot as plt
 from tqdm import tqdm
@@ -146,6 +145,7 @@ class Learner():
         self.rendered = rendered
         controller = None
         if self.rendered:
+            from physengine import render
             engine = render.PhysWin(winwidth, winheight)
             controller = render.PhysWinController()
         else:
