@@ -20,9 +20,11 @@ class PymunkSpace():
         self.MIN_NET_X = self.winwidth * (3/4)
         self.MAX_NET_X = self.MIN_NET_X # For now, don't allow net to vary in x direction
         self.MIN_NET_Y = 200
+        #self.MAX_NET_Y = self.MIN_NET_Y
         self.MAX_NET_Y = self.winheight - 100
         
         self.MIN_BALL_X = 0 + self.COORD_STEP_SIZE
+        #self.MAX_BALL_X = self.MIN_BALL_X
         self.MAX_BALL_X = self.winwidth / 2 - self.COORD_STEP_SIZE
         self.STARTING_BALL_Y = 200
         
@@ -78,7 +80,10 @@ class PymunkSpace():
         self.ball_missed_by = 1
         
         if doRandomize:
-            self.initial_basketball_x = random.randrange(self.MIN_BALL_X, self.MAX_BALL_X, self.COORD_STEP_SIZE)
+            if self.MIN_BALL_X == self.MAX_BALL_X:
+                self.initial_basketball_x = self.MIN_BALL_X
+            else:
+                self.initial_basketball_x = random.randrange(self.MIN_BALL_X, self.MAX_BALL_X, self.COORD_STEP_SIZE)
             #self.initial_basketball_x = self.MIN_BALL_X
             # Basketball will always start at the same height
             self.initial_basketball_y = self.STARTING_BALL_Y
@@ -87,11 +92,15 @@ class PymunkSpace():
                 self.initial_hoop_x = self.MIN_NET_X
             else:
                 self.initial_hoop_x = random.randrange(self.MIN_NET_X, self.MAX_NET_X, self.COORD_STEP_SIZE)
-            self.initial_hoop_y = random.randrange(self.MIN_NET_Y, self.MAX_NET_Y, self.COORD_STEP_SIZE)
             
-            wind_angle = random.randrange(0, 360, 15)
-            #wind_angle = 180
-            self.wind_x, self.wind_y = self.get_x_y(self.WIND_FORCE, wind_angle)
+            if self.MIN_NET_Y == self.MAX_NET_Y:
+                self.initial_hoop_y = self.MIN_NET_Y
+            else:
+                self.initial_hoop_y = random.randrange(self.MIN_NET_Y, self.MAX_NET_Y, self.COORD_STEP_SIZE)
+            
+        wind_angle = random.randrange(0, 360, 60)
+        #wind_angle = 180
+        self.wind_x, self.wind_y = self.get_x_y(self.WIND_FORCE, wind_angle)
 
 
         self.space.gravity = 0 + self.wind_x, self.DEFAULT_GRAVITY + self.wind_y

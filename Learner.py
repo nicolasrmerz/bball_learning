@@ -152,9 +152,9 @@ class Learner():
             engine = norender.PymunkSpaceNoRender(winwidth, winheight)
         
         if self.model_type == "qlearn":
-            self.model = QLearn(engine, controller, 0.025, 0.75, 0.1)
+            self.model = QLearn(engine, controller, 0.0025, 0.75, 0.05)
         elif self.model_type == "sarsa":
-            self.model = Sarsa(engine, controller, 0.025, 0.75, 0.1)
+            self.model = Sarsa(engine, controller, 0.0025, 0.75, 0.05)
         
     def start(self, episodes, graph):
         self.graph = graph
