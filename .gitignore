@@ -103,5 +103,9 @@ venv.bak/
 # mypy
 .mypy_cache/
 
+# locks
+*.swp
+
+# Resources (images) and saved outputs
 resource/
 data/
