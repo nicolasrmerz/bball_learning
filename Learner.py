@@ -130,7 +130,7 @@ class Sarsa(TabModel):
             
             new_state = self.getState()
             new_actionidx = self.getAction(new_state)
-            new_action_val = self.getActionsForState(newstate)[new_actionidx]
+            new_action_val = self.getActionsForState(new_state)[new_actionidx]
             self.update(reward, actionidx, action_taken_val, new_action_val)
 
             self.state = new_state
@@ -140,7 +140,8 @@ class Sarsa(TabModel):
             
 
 class Learner():
-    def __init__(self, winwidth, winheight, rendered):
+    def __init__(self, winwidth, winheight, model_type, rendered):
+        self.model_type = model_type
         # Whether or not training should be rendered
         self.rendered = rendered
         controller = None
@@ -150,7 +151,10 @@ class Learner():
         else:
             engine = norender.PymunkSpaceNoRender(winwidth, winheight)
         
-        self.model = QLearn(engine, controller, 0.025, 0.75, 0.1)
+        if self.model_type == "qlearn":
+            self.model = QLearn(engine, controller, 0.025, 0.75, 0.1)
+        elif self.model_type == "sarsa":
+            self.model = Sarsa(engine, controller, 0.025, 0.75, 0.1)
         
     def start(self, episodes, graph):
         self.graph = graph
@@ -193,8 +197,8 @@ class Learner():
     def saveListAndTable(self, shots_taken_graph):
         dirname = os.path.dirname(os.path.abspath(__file__))
         ts = str(datetime.datetime.now()).split('.')[0].replace(" ", "_").replace(":", "-")
-        graphfilename = dirname + "/data/" + ts + "_graph.pkl"
-        tablefilename = dirname + "/data/" + ts + "_table.pkl"
+        graphfilename = dirname + "/data/" + ts + "_graph-" + self.model_type + ".pkl"
+        tablefilename = dirname + "/data/" + ts + "_table-" + self.model_type + ".pkl"
         print("Saving " + graphfilename + "...")
         pickle.dump(shots_taken_graph, open(graphfilename, "wb"))
         print("Saving " + tablefilename + "...")
@@ -221,8 +225,17 @@ if __name__ == "__main__":
     parser.add_argument("--graph", type=str2bool, nargs='?',
                         const=True, default=False,
                         help="Whether or not to display the graph of the results")
+    parser.add_argument("--eps", type=int, default=1000, help="Number of episodes")
+    parser.add_argument("--algo", type=str, default="sarsa", choices=["qlearn","sarsa"], help="Which RL algorithm to use")
+    parser.add_argument("--render", type=str2bool, nargs='?',
+                        const=True, default=False,
+                        help="Whether or not to render the game")
     args = parser.parse_args()
     graph = args.graph
+    eps = args.eps
+    algo = args.algo
+    rendered = args.render
+
     random.seed(3)
-    learner = Learner(500, 500, False)
-    learner.start(100, graph)
+    learner = Learner(500, 500, algo, rendered)
+    learner.start(eps, graph)
