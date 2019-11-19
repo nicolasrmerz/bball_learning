@@ -13,6 +13,19 @@ job_queue = queue.Queue()
 done_queue = queue.Queue()
 dirname = os.path.dirname(os.path.abspath(__file__))
 
+class PhysWinController():
+    def __init__ (self):
+        done_queue.get()
+        
+    def shoot(self, action):
+        job_queue.put(action)
+        missed_by = done_queue.get()
+        return missed_by
+    
+    def move(self, dir):
+        job_queue.put(norender.Action(dir, 0, 0))
+        done = done_queue.get()
+
 class PhysWin(pyglet.window.Window):
     def __init__ (self, winwidth, winheight):
         self.winheight = winheight
@@ -84,7 +97,6 @@ class PhysWin(pyglet.window.Window):
         if self.pmSpace.ball_missed:
             # Reset the space but don't move the position of the ball or the hoop
             missed_by = self.pmSpace.ball_missed_by
-            print("MISSED BY: ", missed_by)
             self.reset_space(False)
             self.doingAction = False
             done_queue.put(missed_by)
