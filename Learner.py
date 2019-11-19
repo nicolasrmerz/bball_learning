@@ -197,8 +197,8 @@ class Learner():
     def saveListAndTable(self, shots_taken_graph):
         dirname = os.path.dirname(os.path.abspath(__file__))
         ts = str(datetime.datetime.now()).split('.')[0].replace(" ", "_").replace(":", "-")
-        graphfilename = dirname + "/data/" + ts + "_graph-" + self.model_type + ".pkl"
-        tablefilename = dirname + "/data/" + ts + "_table-" + self.model_type + ".pkl"
+        graphfilename = dirname + "/data/" + ts + "_graph_" + self.model_type + ".pkl"
+        tablefilename = dirname + "/data/" + ts + "_table_" + self.model_type + ".pkl"
         print("Saving " + graphfilename + "...")
         pickle.dump(shots_taken_graph, open(graphfilename, "wb"))
         print("Saving " + tablefilename + "...")
