@@ -172,8 +172,7 @@ class Learner():
             shots_taken_graph.append(shots_taken)
         pbar.close()
         graphfilename, tablefilename = self.saveListAndTable(shots_taken_graph)
-        if self.graph:
-            self.plotGraph(shots_taken_graph, graphfilename)
+        self.plotGraph(shots_taken_graph, graphfilename)
         
         
     def plotGraph(self, shots, graphfilename):
@@ -186,8 +185,10 @@ class Learner():
                title='Shots Taken Per Episode')
         ax.grid()
 
+        print("Saving " + graphfilename + ".png...")
         fig.savefig(graphfilename + ".png")
-        plt.show()
+        if self.graph:
+            plt.show()
     
     def saveListAndTable(self, shots_taken_graph):
         dirname = os.path.dirname(os.path.abspath(__file__))
@@ -219,7 +220,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--graph", type=str2bool, nargs='?',
                         const=True, default=False,
-                        help="Whether or not to graph the results")
+                        help="Whether or not to display the graph of the results")
     args = parser.parse_args()
     graph = args.graph
     random.seed(3)
