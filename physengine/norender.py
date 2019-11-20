@@ -20,12 +20,12 @@ class PymunkSpace():
         self.MIN_NET_X = self.winwidth * (3/4)
         self.MAX_NET_X = self.MIN_NET_X # For now, don't allow net to vary in x direction
         self.MIN_NET_Y = 200
-        #self.MAX_NET_Y = self.MIN_NET_Y
-        self.MAX_NET_Y = self.winheight - 100
+        self.MAX_NET_Y = self.MIN_NET_Y
+        #self.MAX_NET_Y = self.winheight - 100
         
         self.MIN_BALL_X = 0 + self.COORD_STEP_SIZE
-        #self.MAX_BALL_X = self.MIN_BALL_X
-        self.MAX_BALL_X = self.winwidth / 2 - self.COORD_STEP_SIZE
+        self.MAX_BALL_X = self.MIN_BALL_X
+        #self.MAX_BALL_X = self.winwidth / 2 - self.COORD_STEP_SIZE
         self.STARTING_BALL_Y = 200
         
         self.MIN_SHOT_VEL = 100
@@ -98,9 +98,9 @@ class PymunkSpace():
             else:
                 self.initial_hoop_y = random.randrange(self.MIN_NET_Y, self.MAX_NET_Y, self.COORD_STEP_SIZE)
             
-        wind_angle = random.randrange(0, 360, 60)
-        #wind_angle = 180
-        self.wind_x, self.wind_y = self.get_x_y(self.WIND_FORCE, wind_angle)
+            wind_angle = random.randrange(0, 360, 60)
+            #wind_angle = 180
+            self.wind_x, self.wind_y = self.get_x_y(self.WIND_FORCE, wind_angle)
 
 
         self.space.gravity = 0 + self.wind_x, self.DEFAULT_GRAVITY + self.wind_y

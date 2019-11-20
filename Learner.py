@@ -11,6 +11,8 @@ import collections
 import pickle
 import os
 import argparse
+from math import exp
+from numpy.random import choice
 
 
 class TabModel():
@@ -43,14 +45,15 @@ class TabModel():
     def getActionEGreedy(self, actions):
         # Epsilon greedy; if generated value is less than epsilon, randomly pick an action, otherwise take the max action
         if random.uniform(0, 1) <= self.epsilon:
-            return random.randrange(0, len(actions))
+            idx = random.randrange(0, len(actions))
+            return actions[idx], idx
         else:
             return self.getMaxAction(actions)
         
     def getMaxAction(self, actions):
         max_value = max(actions)
         #max_inds = [i for i, x in enumerate(actions) if x == max_value]
-        return actions.index(max_value)
+        return max_value, actions.index(max_value)
         
     def doShoot(self, action):
         if self.controller:
@@ -85,8 +88,7 @@ class QLearn(TabModel):
         self.state = self.getState()
         basket_made = False
         while basket_made is False:
-            actionidx = self.getAction(self.state)
-            action_taken_val = self.getActionsForState(self.state)[actionidx]
+            action_taken_val, actionidx = self.getAction(self.state)
             action = self.engine.mapActionToVals(actionidx)
             if action.action_type == "shoot":
                 basket_made, reward = self.doShoot(action)
@@ -111,8 +113,7 @@ class Sarsa(TabModel):
     def runEpisode(self):
         self.shots_taken = 0
         self.state = self.getState()
-        actionidx = self.getAction(self.state)
-        action_taken_val = self.getActionsForState(self.state)[actionidx]
+        action_taken_val, actionidx = self.getAction(self.state)
         basket_made = False
         while basket_made is False:
             action = self.engine.mapActionToVals(actionidx)
@@ -128,16 +129,70 @@ class Sarsa(TabModel):
                 reward = -0.1
             
             new_state = self.getState()
-            new_actionidx = self.getAction(new_state)
-            new_action_val = self.getActionsForState(new_state)[new_actionidx]
+            new_action_val, new_actionidx = self.getAction(new_state)
             self.update(reward, actionidx, action_taken_val, new_action_val)
 
             self.state = new_state
             actionidx = new_actionidx
             action_taken_val = new_action_val
         return self.shots_taken
-            
 
+# This is identical to Sarsa, but instead of using an epsilon-greedy policy, it uses a Boltzmann distribution
+class BoltzSarsa(Sarsa):
+    def __init__(self, engine, controller, alpha, gamma, epsilon, tau):
+        Sarsa.__init__(self, engine, controller, alpha, gamma, epsilon)
+        # Temperature value
+        self.tau = tau
+        
+    def getAction(self, state):
+        actions = self.getActionsForState(state)
+        weightvec = self.genWeightVec(actions)
+        idx = choice(range(len(actions)), p=weightvec)
+        return actions[idx], idx
+        
+    def genWeightVec(self, actions):
+        def expWithTemp(val):
+            return exp(val/self.tau)
+            
+        sumexp = sum(map(expWithTemp, actions))
+        return list(map(lambda x:expWithTemp(x)/sumexp, actions))
+        
+class RankedSarsa(TabModel):
+    def __init__(self, engine, controller, alpha, gamma, epsilon):
+        TabModel.__init__(self, engine, controller, alpha, gamma, epsilon)
+        
+    def runEpisode(self):
+        self.shots_taken = 0
+        self.state = self.getState()
+        # Initialize a temporary action list for this episode
+        actionlist = self.getActionsForState(self.state)
+        action_taken_val, actionidx = self.getAction(actionlist)
+        basket_made = False
+        while basket_made is False:
+            action = self.engine.mapActionToVals(actionidx)
+            if action.action_type == "shoot":
+                basket_made, reward = self.doShoot(action)
+                self.shots_taken += 1
+            else:
+                if self.controller:
+                    self.controller.move(action.action_type)
+                else:
+                    self.engine.move(action.action_type)
+                # Reward of -0.1 for movement
+                reward = -0.1
+            
+            # If the attempted shot failed, give it an infinite negative reward so it will not be tried again for this episode
+            actionlist[actionidx] = float("-inf")
+            new_action_val, new_actionidx = self.getAction(actionlist)
+            self.update(reward, actionidx, action_taken_val, new_action_val)
+
+            actionidx = new_actionidx
+            action_taken_val = new_action_val
+        return self.shots_taken
+        
+    def getAction(self, actions):
+        return self.getActionEGreedy(actions)
+    
 class Learner():
     def __init__(self, winwidth, winheight, model_type, rendered):
         self.model_type = model_type
@@ -155,6 +210,11 @@ class Learner():
             self.model = QLearn(engine, controller, 0.0025, 0.75, 0.05)
         elif self.model_type == "sarsa":
             self.model = Sarsa(engine, controller, 0.0025, 0.75, 0.05)
+        elif self.model_type == "bsarsa":
+            self.model = BoltzSarsa(engine, controller, 0.0025, 0.75, 0.05, 0.1)
+        elif self.model_type == "rsarsa":
+            self.model = RankedSarsa(engine, controller, 0.0025, 0.75, 0.05)
+
         
     def start(self, episodes, graph):
         self.graph = graph
@@ -226,7 +286,7 @@ if __name__ == "__main__":
                         const=True, default=False,
                         help="Whether or not to display the graph of the results")
     parser.add_argument("--eps", type=int, default=1000, help="Number of episodes")
-    parser.add_argument("--algo", type=str, default="sarsa", choices=["qlearn","sarsa"], help="Which RL algorithm to use")
+    parser.add_argument("--algo", type=str, default="sarsa", choices=["qlearn","sarsa","bsarsa","rsarsa"], help="Which RL algorithm to use")
     parser.add_argument("--render", type=str2bool, nargs='?',
                         const=True, default=False,
                         help="Whether or not to render the game")
