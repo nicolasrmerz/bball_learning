@@ -12,10 +12,13 @@ import pickle
 import os
 import argparse
 from math import exp
-from numpy.random import choice
+import numpy as np
 
+import tensorflow
+from keras.models import Sequential
+from keras.layers import Dense
 
-class TabModel():
+class Model():
     def __init__(self, engine, controller, alpha, gamma, epsilon):
         self.alpha = alpha
         self.gamma = gamma
@@ -26,17 +29,6 @@ class TabModel():
         self.dt = 0.02
         self.state_space = self.engine.getStateSpace()
         self.action_space = self.engine.getActionSpace()
-        # Initialize table for all states/actions, initialize to 0
-        self.table = [[[[0 for x in range(self.action_space)] for x in range(self.state_space[2])] for x in range(self.state_space[1])] for x in range(self.state_space[0])]
-        #self.loadTable("testtable.pkl")
-        print("Table dimensions: ", len(self.table), " x ", len(self.table[0]), " x ", len(self.table[0][0]), " x ", len(self.table[0][0][0]))
-        
-    def getAction(self, state):
-        actions = self.getActionsForState(state)
-        return self.getActionEGreedy(actions)
-        
-    def getActionsForState(self, state):
-        return self.table[state[0]][state[1]][state[2]]
         
     def getState(self):
         net_x, net_y, ball_x = self.engine.getCoords()
@@ -68,6 +60,73 @@ class TabModel():
             reward = -missed_by
             basket_made = False
         return basket_made, reward
+        
+class ApproxModel(Model):
+    def __init__(self, engine, controller, alpha, gamma, epsilon):
+        Model.__init__(self, engine, controller, alpha, gamma, epsilon)
+        
+        self.nn = Sequential()
+        self.nn.add(Dense(200, input_shape=(len(self.state_space),), activation='sigmoid'))
+        self.nn.add(Dense(100, activation='sigmoid'))
+        self.nn.add(Dense(self.action_space, activation='linear'))
+        self.nn.compile(loss='mse', optimizer='adam', metrics=['mae'])
+
+class SGSarsa(ApproxModel):
+    def __init__(self, engine, controller, alpha, gamma, epsilon):
+        ApproxModel.__init__(self, engine, controller, alpha, gamma, epsilon)
+
+
+    def runEpisode(self):
+        self.shots_taken = 0
+        self.state = self.getState()
+        action_taken_val, actionidx = self.getAction(self.state)
+        basket_made = False
+        while basket_made is False:
+            action = self.engine.mapActionToVals(actionidx)
+            if action.action_type == "shoot":
+                basket_made, reward = self.doShoot(action)
+                self.shots_taken += 1
+            else:
+                if self.controller:
+                    self.controller.move(action.action_type)
+                else:
+                    self.engine.move(action.action_type)
+                # Reward of -0.1 for movement
+                reward = -0.1
+            
+            new_state = self.getState()
+            new_action_val, new_actionidx = self.getAction(new_state)
+            self.update(reward, actionidx, action_taken_val, new_action_val)
+
+            self.state = new_state
+            actionidx = new_actionidx
+            action_taken_val = new_action_val
+        return self.shots_taken
+
+    def getAction(self, state):
+        print(state)
+        print(np.array(state))
+        print(np.array(state).shape)
+        actions = self.nn.predict(np.transpose(np.array(state)))
+        #actions = self.getActionsForState(state)
+        #return self.getActionEGreedy(actions)
+        
+
+class TabModel(Model):
+    def __init__(self, engine, controller, alpha, gamma, epsilon):
+        Model.__init__(self, engine, controller, alpha, gamma, epsilon)
+
+        # Initialize table for all states/actions, initialize to 0
+        self.table = [[[[0 for x in range(self.action_space)] for x in range(self.state_space[2])] for x in range(self.state_space[1])] for x in range(self.state_space[0])]
+        #self.loadTable("testtable.pkl")
+        print("Table dimensions: ", len(self.table), " x ", len(self.table[0]), " x ", len(self.table[0][0]), " x ", len(self.table[0][0][0]))
+        
+    def getAction(self, state):
+        actions = self.getActionsForState(state)
+        return self.getActionEGreedy(actions)
+        
+    def getActionsForState(self, state):
+        return self.table[state[0]][state[1]][state[2]]
         
     def update(self, reward, actionidx, action_taken_val, next_action_val):
         updt = self.alpha * (reward + self.gamma*next_action_val - action_taken_val)
@@ -147,7 +206,7 @@ class BoltzSarsa(Sarsa):
     def getAction(self, state):
         actions = self.getActionsForState(state)
         weightvec = self.genWeightVec(actions)
-        idx = choice(range(len(actions)), p=weightvec)
+        idx = np.random.choice(range(len(actions)), p=weightvec)
         return actions[idx], idx
         
     def genWeightVec(self, actions):
@@ -214,6 +273,8 @@ class Learner():
             self.model = BoltzSarsa(engine, controller, 0.0025, 0.75, 0.05, 0.1)
         elif self.model_type == "rsarsa":
             self.model = RankedSarsa(engine, controller, 0.0025, 0.75, 0.05)
+        elif self.model_type == "sgsarsa":
+            self.model = SGSarsa(engine, controller, 0.0025, 0.75, 0.05)
 
         
     def start(self, episodes, graph):
@@ -286,7 +347,7 @@ if __name__ == "__main__":
                         const=True, default=False,
                         help="Whether or not to display the graph of the results")
     parser.add_argument("--eps", type=int, default=1000, help="Number of episodes")
-    parser.add_argument("--algo", type=str, default="sarsa", choices=["qlearn","sarsa","bsarsa","rsarsa"], help="Which RL algorithm to use")
+    parser.add_argument("--algo", type=str, default="sarsa", choices=["qlearn","sarsa","bsarsa","rsarsa", "sgsarsa"], help="Which RL algorithm to use")
     parser.add_argument("--render", type=str2bool, nargs='?',
                         const=True, default=False,
                         help="Whether or not to render the game")
