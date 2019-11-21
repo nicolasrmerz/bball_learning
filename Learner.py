@@ -17,7 +17,8 @@ import configparser
 
 import tensorflow
 from keras.models import Sequential
-from keras.layers import Dense
+from keras.models import Model as kModel
+from keras.layers import Input, Dense
 
 class Model():
     def __init__(self, engine, controller, alpha, gamma, epsilon):
@@ -66,8 +67,14 @@ class ApproxModel(Model):
     def __init__(self, engine, controller, alpha, gamma, epsilon):
         Model.__init__(self, engine, controller, alpha, gamma, epsilon)
         
+        #inputs = Input(shape=(3,))
+        #x = Dense(200, activation='sigmoid')(inputs)
+        #x = Dense(100, activation='sigmoid')(x)
+        #x = Dense(self.action_space, activation='linear')
+        #self.nn = kModel(inputs, x)
+        print(np.array(self.state_space).shape)
         self.nn = Sequential()
-        self.nn.add(Dense(200, input_shape=(len(self.state_space),), activation='sigmoid'))
+        self.nn.add(Dense(200, batch_input_shape=(1,len(self.state_space)), activation='sigmoid'))
         self.nn.add(Dense(100, activation='sigmoid'))
         self.nn.add(Dense(self.action_space, activation='linear'))
         self.nn.compile(loss='mse', optimizer='adam', metrics=['mae'])
@@ -105,12 +112,8 @@ class SGSarsa(ApproxModel):
         return self.shots_taken
 
     def getAction(self, state):
-        print(state)
-        print(np.array(state))
-        print(np.array(state).shape)
-        actions = self.nn.predict(np.transpose(np.array(state)))
-        #actions = self.getActionsForState(state)
-        #return self.getActionEGreedy(actions)
+        actions = self.nn.predict(np.array([state,]))[0]
+        return self.getActionEGreedy(actions)
         
 
 class TabModel(Model):
