@@ -19,6 +19,7 @@ import tensorflow
 from keras.models import Sequential
 from keras.models import Model as kModel
 from keras.layers import Input, Dense
+from keras.optimizers import Adam
 
 class Model():
     def __init__(self, engine, controller, alpha, gamma, epsilon):
@@ -77,7 +78,8 @@ class ApproxModel(Model):
         self.nn.add(Dense(200, batch_input_shape=(1,len(self.state_space)), activation='sigmoid'))
         self.nn.add(Dense(100, activation='sigmoid'))
         self.nn.add(Dense(self.action_space, activation='linear'))
-        self.nn.compile(loss='mse', optimizer='adam', metrics=['mae'])
+        opt = Adam(learning_rate=self.alpha)
+        self.nn.compile(loss='mse', optimizer=opt, metrics=['mae'])
 
 class SGSarsa(ApproxModel):
     def __init__(self, engine, controller, alpha, gamma, epsilon):
@@ -87,7 +89,7 @@ class SGSarsa(ApproxModel):
     def runEpisode(self):
         self.shots_taken = 0
         self.state = self.getState()
-        action_taken_val, actionidx = self.getAction(self.state)
+        action_taken_val, actionidx, actions = self.getAction(self.state)
         basket_made = False
         while basket_made is False:
             action = self.engine.mapActionToVals(actionidx)
@@ -103,8 +105,17 @@ class SGSarsa(ApproxModel):
                 reward = -0.1
             
             new_state = self.getState()
-            new_action_val, new_actionidx = self.getAction(new_state)
-            self.update(reward, actionidx, action_taken_val, new_action_val)
+            if basket_made is True:
+                target = reward
+                actions[actionidx] = target
+                self.nn.fit(np.array([self.state,]), actions.reshape(-1, len(actions)), epochs=1, verbose=0)
+                return self.shots_taken
+
+            new_action_val, new_actionidx, new_actions = self.getAction(new_state)
+            target = reward + self.gamma*new_action_val
+            actions[actionidx] = target
+            self.nn.fit(np.array([self.state,]), actions.reshape(-1, len(actions)), epochs=1, verbose=0)
+            #self.update(reward, actionidx, action_taken_val, new_action_val)
 
             self.state = new_state
             actionidx = new_actionidx
@@ -113,7 +124,8 @@ class SGSarsa(ApproxModel):
 
     def getAction(self, state):
         actions = self.nn.predict(np.array([state,]))[0]
-        return self.getActionEGreedy(actions)
+        val, idx = self.getActionEGreedy(actions.tolist())
+        return val, idx, actions
         
 
 class TabModel(Model):
@@ -334,8 +346,10 @@ class Learner():
         tablefilename = dirname + "/data/" + ts + "_table_" + self.model_type + ".pkl"
         print("Saving " + graphfilename + "...")
         pickle.dump(shots_taken_graph, open(graphfilename, "wb"))
-        print("Saving " + tablefilename + "...")
-        self.model.saveTable(tablefilename)
+        tablename = 'null'
+        if self.model_type != "sgsarsa":
+            print("Saving " + tablefilename + "...")
+            self.model.saveTable(tablefilename)
         return graphfilename, tablefilename
 
         
