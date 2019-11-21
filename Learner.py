@@ -13,6 +13,7 @@ import os
 import argparse
 from math import exp
 import numpy as np
+import configparser
 
 import tensorflow
 from keras.models import Sequential
@@ -253,28 +254,36 @@ class RankedSarsa(TabModel):
         return self.getActionEGreedy(actions)
     
 class Learner():
-    def __init__(self, winwidth, winheight, model_type, rendered):
+    def __init__(self, cfgname, model_type, rendered):
+        if not os.path.isfile(cfgname):
+            print(cfgname + " does not exist, creating...")
+            self.genDefaultCfg()
+    
+        config = configparser.ConfigParser()
+        config.read(cfgname)
+        alpha, gamma, epsilon, tau = self.parseCfg(config['Learner'])
         self.model_type = model_type
         # Whether or not training should be rendered
         self.rendered = rendered
         controller = None
         if self.rendered:
             from physengine import render
-            engine = render.PhysWin(winwidth, winheight)
+            engine = render.PhysWin(config['Game'])
             controller = render.PhysWinController()
         else:
-            engine = norender.PymunkSpaceNoRender(winwidth, winheight)
+            engine = norender.PymunkSpaceNoRender(config['Game'])
+        
         
         if self.model_type == "qlearn":
-            self.model = QLearn(engine, controller, 0.0025, 0.75, 0.05)
+            self.model = QLearn(engine, controller, alpha, gamma, epsilon)
         elif self.model_type == "sarsa":
-            self.model = Sarsa(engine, controller, 0.0025, 0.75, 0.05)
+            self.model = Sarsa(engine, controller, alpha, gamma, epsilon)
         elif self.model_type == "bsarsa":
-            self.model = BoltzSarsa(engine, controller, 0.0025, 0.75, 0.05, 0.1)
+            self.model = BoltzSarsa(engine, controller, alpha, gamma, epsilon, tau)
         elif self.model_type == "rsarsa":
-            self.model = RankedSarsa(engine, controller, 0.0025, 0.75, 0.05)
+            self.model = RankedSarsa(engine, controller, alpha, gamma, epsilon)
         elif self.model_type == "sgsarsa":
-            self.model = SGSarsa(engine, controller, 0.0025, 0.75, 0.05)
+            self.model = SGSarsa(engine, controller, alpha, gamma, epsilon)
 
         
     def start(self, episodes, graph):
@@ -330,6 +339,35 @@ class Learner():
     def getAction(self):
         return self.model.getAction(bball_x, bball_y, net_x, net_y)
         
+    def genDefaultCfg(self):
+        config = configparser.ConfigParser()
+        config['Learner'] = {'alpha': '0.05',
+                                'gamma': '0.9',
+                                'epsilon': '0.1',
+                                'tau': '0.1'}
+                                
+        config['Game'] = {'winwidth': '500',
+                            'winheight': '500',
+                            'CoordStepSize': '50',
+                            'MinShotVel': '100',
+                            'MaxShotVel': '1000',
+                            'VelocityStepSize': '20',
+                            'MinShotAngle': '0',
+                            'MaxShotAngle': '90',
+                            'AngleStepSize': '5',
+                            'WindForce': '150',
+                            'DefaultGravity': '-900',
+                            'AlwaysRandomizeWind': 'no'}
+        with open('config.ini', 'w') as configfile:
+            config.write(configfile)
+            
+    def parseCfg(self, cfg):
+        alpha = float(cfg['alpha'])
+        gamma = float(cfg['gamma'])
+        epsilon = float(cfg['epsilon'])
+        tau = float(cfg['tau'])
+        return alpha, gamma, epsilon, tau
+
     
 if __name__ == "__main__":
     def str2bool(v):
@@ -351,12 +389,15 @@ if __name__ == "__main__":
     parser.add_argument("--render", type=str2bool, nargs='?',
                         const=True, default=False,
                         help="Whether or not to render the game")
+    parser.add_argument("--cfg", type=str, default="config.ini", help="Name of the config file to load")
+
     args = parser.parse_args()
     graph = args.graph
     eps = args.eps
     algo = args.algo
     rendered = args.render
+    cfg = args.cfg
 
     random.seed(3)
-    learner = Learner(500, 500, algo, rendered)
+    learner = Learner(cfg, algo, rendered)
     learner.start(eps, graph)

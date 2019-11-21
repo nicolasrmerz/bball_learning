@@ -27,12 +27,12 @@ class PhysWinController():
         done = done_queue.get()
 
 class PhysWin(pyglet.window.Window):
-    def __init__ (self, winwidth, winheight):
-        self.winheight = winheight
-        self.winwidth = winwidth
+    def __init__ (self, cfg):
+        self.winwidth = int(cfg['winwidth'])
+        self.winheight = int(cfg['winheight'])
         pyglet.window.Window.__init__(self, self.winheight, self.winwidth, fullscreen = False)
         self.options = DrawOptions()
-        self.pmSpace = norender.PymunkSpace(self.winwidth, self.winheight)
+        self.pmSpace = norender.PymunkSpace(cfg)
         background = pyglet.image.SolidColorImagePattern((255,255,255,255)).create_image(self.winheight, self.winwidth)
         self.background_sprite = pyglet.sprite.Sprite(background, x=0, y=0)
         pyglet.clock.schedule_interval(self.update, 1.0/60)

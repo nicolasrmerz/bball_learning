@@ -10,36 +10,38 @@ class Action():
         self.angle = angle
         
 class PymunkSpace():
-    def __init__(self, winwidth, winheight):
-        self.winwidth = winwidth
-        self.winheight = winheight
+    def __init__(self, cfg):
+        self.winwidth = int(cfg['winwidth'])
+        self.winheight = int(cfg['winheight'])
         # Define some constant constraints for the system
-        self.COORD_STEP_SIZE = 50
+        self.COORD_STEP_SIZE = int(cfg['CoordStepSize'])
         self.MIN_NET_X = self.winwidth / 2 + self.COORD_STEP_SIZE
         self.MAX_NET_X = self.winwidth - self.COORD_STEP_SIZE
         #self.MAX_NET_X = self.MIN_NET_X # For now, don't allow net to vary in x direction
-        self.MIN_NET_Y = 200
+        self.MIN_NET_Y = 4 * self.COORD_STEP_SIZE
         #self.MAX_NET_Y = self.MIN_NET_Y
         self.MAX_NET_Y = self.winheight - 100
         
         self.MIN_BALL_X = 0 + self.COORD_STEP_SIZE
         #self.MAX_BALL_X = self.MIN_BALL_X
         self.MAX_BALL_X = self.winwidth / 2 - self.COORD_STEP_SIZE
-        self.STARTING_BALL_Y = 200
+        self.STARTING_BALL_Y = 4 * self.COORD_STEP_SIZE
         
-        self.MIN_SHOT_VEL = 100
-        self.MAX_SHOT_VEL = 1000
-        self.VELOCITY_STEP_SIZE = 20
+        self.MIN_SHOT_VEL = int(cfg['MinShotVel'])
+        self.MAX_SHOT_VEL = int(cfg['MaxShotVel'])
+        self.VELOCITY_STEP_SIZE = int(cfg['VelocityStepSize'])
         
-        self.MIN_SHOT_ANGLE = 0
-        self.MAX_SHOT_ANGLE = 90
-        self.ANGLE_STEP_SIZE = 5
+        self.MIN_SHOT_ANGLE = int(cfg['MinShotAngle'])
+        self.MAX_SHOT_ANGLE = int(cfg['MaxShotAngle'])
+        self.ANGLE_STEP_SIZE = int(cfg['AngleStepSize'])
         
-        self.WIND_FORCE = 150
+        self.WIND_FORCE = int(cfg['WindForce'])
         
-        self.DEFAULT_GRAVITY = -900
+        self.DEFAULT_GRAVITY = int(cfg['DefaultGravity'])
         
         self.MAX_STEPS = 250
+        
+        self.ALWAYS_RANDOMIZE_WIND = cfg.getboolean('AlwaysRandomizeWind')
         
         self.reset_space(True)
         
@@ -96,9 +98,13 @@ class PymunkSpace():
                 self.initial_hoop_y = self.MIN_NET_Y
             else:
                 self.initial_hoop_y = random.randrange(self.MIN_NET_Y, self.MAX_NET_Y, self.COORD_STEP_SIZE)
+                
+            if not self.ALWAYS_RANDOMIZE_WIND:
+                wind_angle = random.randrange(0, 360, 60)
+                self.wind_x, self.wind_y = self.get_x_y(self.WIND_FORCE, wind_angle)
             
+        if self.ALWAYS_RANDOMIZE_WIND:
             wind_angle = random.randrange(0, 360, 60)
-            #wind_angle = 180
             self.wind_x, self.wind_y = self.get_x_y(self.WIND_FORCE, wind_angle)
 
 
@@ -111,7 +117,7 @@ class PymunkSpace():
             self.initial_basketball_x, self.initial_basketball_y, "basketball", pymunk.Body.STATIC)
         
         self.ground_body = pymunk.Body(body_type=pymunk.Body.STATIC)
-        self.ground_shape = pymunk.Poly.create_box(self.ground_body, size=(10000, 100))
+        self.ground_shape = pymunk.Poly.create_box(self.ground_body, size=(10000, 2 * self.COORD_STEP_SIZE))
         # Used to see if there's a collision between the basketball and the ground (shot was missed)
         self.ground_shape.id = "ground"
         self.ground_body.position = 0, 0
@@ -283,8 +289,8 @@ class PymunkSpace():
 
         
 class PymunkSpaceNoRender(PymunkSpace):
-    def __init__ (self, winwidth, winheight):
-        PymunkSpace.__init__(self, winwidth, winheight)
+    def __init__ (self, cfg):
+        PymunkSpace.__init__(self, cfg)
         
     def shoot(self, action, dt):
         super().shoot(action)
@@ -309,15 +315,3 @@ class PymunkSpaceNoRender(PymunkSpace):
         self.space.step(dt)
         
         self.check_bounds()
-
-
-if __name__ == "__main__":
-    pmSpace = PymunkSpaceNoRender(500, 600)
-
-    while True:
-        pmSpace.move("r")
-        pmSpace.move("r")
-        if pmSpace.shoot(Action("shoot", 300, 45), 0.02):
-            print ("Basket hit!")
-        else:
-            print ("Basket missed!")

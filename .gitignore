@@ -109,3 +109,4 @@ venv.bak/
 # Resources (images) and saved outputs
 resource/
 data/
+*.ini
