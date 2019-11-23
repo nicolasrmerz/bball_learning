@@ -230,6 +230,25 @@ class BoltzSarsa(Sarsa):
         sumexp = sum(map(expWithTemp, actions))
         return list(map(lambda x:expWithTemp(x)/sumexp, actions))
         
+class BoltzQLearn(QLearn):
+    def __init__(self, engine, controller, alpha, gamma, epsilon, tau, distReward):
+        QLearn.__init__(self, engine, controller, alpha, gamma, epsilon, distReward)
+        # Temperature value
+        self.tau = tau
+        
+    def getAction(self, state):
+        actions = self.getActionsForState(state)
+        weightvec = self.genWeightVec(actions)
+        idx = np.random.choice(range(len(actions)), p=weightvec)
+        return actions[idx], idx
+        
+    def genWeightVec(self, actions):
+        def expWithTemp(val):
+            return exp(val/self.tau)
+            
+        sumexp = sum(map(expWithTemp, actions))
+        return list(map(lambda x:expWithTemp(x)/sumexp, actions))
+
 class RankedSarsa(TabModel):
     def __init__(self, engine, controller, alpha, gamma, epsilon, distReward):
         TabModel.__init__(self, engine, controller, alpha, gamma, epsilon, distReward)
@@ -293,6 +312,8 @@ class Learner():
             self.model = Sarsa(engine, controller, alpha, gamma, epsilon, distReward)
         elif self.model_type == "bsarsa":
             self.model = BoltzSarsa(engine, controller, alpha, gamma, epsilon, tau, distReward)
+        elif self.model_type == "bqlearn":
+            self.model = BoltzQLearn(engine, controller, alpha, gamma, epsilon, tau, distReward)
         elif self.model_type == "rsarsa":
             self.model = RankedSarsa(engine, controller, alpha, gamma, epsilon, distReward)
         elif self.model_type == "sgsarsa":
@@ -402,7 +423,7 @@ if __name__ == "__main__":
                         const=True, default=False,
                         help="Whether or not to display the graph of the results")
     parser.add_argument("--eps", type=int, default=1000, help="Number of episodes")
-    parser.add_argument("--algo", type=str, default="sarsa", choices=["qlearn","sarsa","bsarsa","rsarsa", "sgsarsa"], help="Which RL algorithm to use")
+    parser.add_argument("--algo", type=str, default="sarsa", choices=["qlearn", "sarsa", "bsarsa", "bqlearn", "rsarsa", "sgsarsa"], help="Which RL algorithm to use")
     parser.add_argument("--render", type=str2bool, nargs='?',
                         const=True, default=False,
                         help="Whether or not to render the game")
@@ -415,6 +436,6 @@ if __name__ == "__main__":
     rendered = args.render
     cfg = args.cfg
 
-    #random.seed(3)
+    random.seed(3)
     learner = Learner(cfg, algo, rendered)
     learner.start(eps, graph)
