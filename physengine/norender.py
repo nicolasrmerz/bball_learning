@@ -1,4 +1,4 @@
-from modules import pymunk
+import pymunk
 from math import cos, sin, radians
 import random
 
