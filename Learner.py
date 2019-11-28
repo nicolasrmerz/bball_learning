@@ -21,6 +21,8 @@ from keras.models import Model as kModel
 from keras.layers import Input, Dense
 from keras.optimizers import Adam
 
+# This is the class for the base model object that will be used by Learner. It will hold the value of alpha, gamma, epsilon, and the boolean of whether or not to use the flat or proportional rewards.
+# It also contains the engine that it will be applying actions to, and the controller for the rendered window, if the script was passed the --render flag
 class Model():
     def __init__(self, engine, controller, alpha, gamma, epsilon, distReward):
         self.alpha = alpha
@@ -34,10 +36,12 @@ class Model():
         self.state_space = self.engine.getStateSpace()
         self.action_space = self.engine.getActionSpace()
         
+    # Get the current coordinates of the net and ball from the engine
     def getState(self):
         net_x, net_y, ball_x = self.engine.getCoords()
         return self.engine.mapValsToState(net_x, net_y, ball_x)
         
+    # Action selection for epsilon greedy
     def getActionEGreedy(self, actions):
         # Epsilon greedy; if generated value is less than epsilon, randomly pick an action, otherwise take the max action
         if random.uniform(0, 1) <= self.epsilon:
@@ -45,12 +49,14 @@ class Model():
             return actions[idx], idx
         else:
             return self.getMaxAction(actions)
-        
+    
+    # Returns the max value and its index from the supplied action list
     def getMaxAction(self, actions):
         max_value = max(actions)
-        #max_inds = [i for i, x in enumerate(actions) if x == max_value]
         return max_value, actions.index(max_value)
         
+    # Tells the engine to take a shot (using the action supplied to this method),
+    # and returns whether the shot was made and the reward
     def doShoot(self, action):
         if self.controller:
             missed_by = self.controller.shoot(action)
@@ -68,6 +74,8 @@ class Model():
             basket_made = False
         return basket_made, reward
         
+# This is the class for a generic function approximation method that uses a neural network. On top of the attributes of model, it contains the neural network itself
+# The neural network has 2 hidden layers, with 200 and 100 nodes respectively
 class ApproxModel(Model):
     def __init__(self, engine, controller, alpha, gamma, epsilon, distReward):
         Model.__init__(self, engine, controller, alpha, gamma, epsilon, distReward)
@@ -79,6 +87,7 @@ class ApproxModel(Model):
         opt = Adam(learning_rate=self.alpha)
         self.nn.compile(loss='mse', optimizer=opt, metrics=['mae'])
 
+# This actually implements the semi-gradient SARSA algorithm
 class SGSarsa(ApproxModel):
     def __init__(self, engine, controller, alpha, gamma, epsilon, distReward):
         ApproxModel.__init__(self, engine, controller, alpha, gamma, epsilon, distReward)
@@ -125,6 +134,7 @@ class SGSarsa(ApproxModel):
         return val, idx, actions
         
 
+# This class implements the generic tabular model, the functionality of which is extended by the various SARSA and Q-Learning variations as defined in subsequent classes
 class TabModel(Model):
     def __init__(self, engine, controller, alpha, gamma, epsilon, distReward, table):
         Model.__init__(self, engine, controller, alpha, gamma, epsilon, distReward)
@@ -137,23 +147,29 @@ class TabModel(Model):
         
         print("Table dimensions: ", len(self.table), " x ", len(self.table[0]), " x ", len(self.table[0][0]), " x ", len(self.table[0][0][0]))
         
+    # Uses epsilon-greedy to select an action given a state
     def getAction(self, state):
         actions = self.getActionsForState(state)
         return self.getActionEGreedy(actions)
         
+    # Get the set of actions available at the given state
     def getActionsForState(self, state):
         return self.table[state[0]][state[1]][state[2]]
         
+    # This is a generic update rule (SARSA will use the actual next action as the action_taken_val, whereas Q-Learning will supply the max of the next set of actions)
     def update(self, reward, actionidx, action_taken_val, next_action_val):
         updt = self.alpha * (reward + self.gamma*next_action_val - action_taken_val)
         self.table[self.state[0]][self.state[1]][self.state[2]][actionidx] += updt
         
+    # Save the table with the given filename
     def saveTable(self, filename):
         pickle.dump(self.table, open(filename, "wb"))
     
+    # Load a table with the given filename
     def loadTable(self, filename):
         self.table = pickle.load(open(filename, "rb"))
         
+# The purpose of this extended class is to implement the Q-Learning algorithm, exactly as found in the "Reinforcement Learning" textbook
 class QLearn(TabModel):
     def __init__(self, engine, controller, alpha, gamma, epsilon, distReward, table):
         TabModel.__init__(self, engine, controller, alpha, gamma, epsilon, distReward, table)
@@ -180,7 +196,8 @@ class QLearn(TabModel):
             self.update(reward, actionidx, action_taken_val, max(self.getActionsForState(new_state)))
             self.state = new_state
         return self.shots_taken
-                    
+             
+# The purpose of this extended class is to implement the SARSA algorithm, exactly as found in the "Reinforcement Learning" textbook             
 class Sarsa(TabModel):
     def __init__(self, engine, controller, alpha, gamma, epsilon, distReward, table):
         TabModel.__init__(self, engine, controller, alpha, gamma, epsilon, distReward, table)
@@ -212,13 +229,14 @@ class Sarsa(TabModel):
             action_taken_val = new_action_val
         return self.shots_taken
 
-# This is identical to Sarsa, but instead of using an epsilon-greedy policy, it uses a Boltzmann distribution
+# This is identical to SARSA, but instead of using an epsilon-greedy policy, it uses a Boltzmann distribution
 class BoltzSarsa(Sarsa):
     def __init__(self, engine, controller, alpha, gamma, epsilon, tau, distReward, table):
         Sarsa.__init__(self, engine, controller, alpha, gamma, epsilon, distReward, table)
         # Temperature value
         self.tau = tau
         
+    # Gets the set of actions, then weights their choice based on the Boltzmann Distribution    
     def getAction(self, state):
         actions = self.getActionsForState(state)
         weightvec = self.genWeightVec(actions)
@@ -232,6 +250,7 @@ class BoltzSarsa(Sarsa):
         sumexp = sum(map(expWithTemp, actions))
         return list(map(lambda x:expWithTemp(x)/sumexp, actions))
         
+# This class is identical to BoltzSarsa, but instead extends QLearn
 class BoltzQLearn(QLearn):
     def __init__(self, engine, controller, alpha, gamma, epsilon, tau, distReward, table):
         QLearn.__init__(self, engine, controller, alpha, gamma, epsilon, distReward, table)
@@ -251,26 +270,32 @@ class BoltzQLearn(QLearn):
         sumexp = sum(map(expWithTemp, actions))
         return list(map(lambda x:expWithTemp(x)/sumexp, actions))
     
+# Main learner class that starts the learning process.
+# Takes in the name of the config file, which algorithm to use, whether or not to render the game, and a table filename (if one is supplied)
 class Learner():
     def __init__(self, cfgname, model_type, rendered, table):
+        # If the supplied config name is not found, it is created with default values
         if not os.path.isfile(cfgname):
             print(cfgname + " does not exist, creating...")
             self.genDefaultCfg()
     
         config = configparser.ConfigParser()
         config.read(cfgname)
+        # Take these parameters from the "Learning" section of the config file
         alpha, gamma, epsilon, tau, distReward = self.parseCfg(config['Learner'])
         self.model_type = model_type
         # Whether or not training should be rendered
         self.rendered = rendered
         controller = None
+        # If it is rendered, a controller that runs in a seperate thread is used, which is initialized here
         if self.rendered:
+            # Do the import here, as pyglet will complain if it is imported at the top no matter what over command line (say you want to ssh into a server and run it un-rendered, it will not work)
             from physengine import render
             engine = render.PhysWin(config['Game'])
             controller = render.PhysWinController()
+        # Otherwise, use the non-rendered pymunk engine
         else:
             engine = norender.PymunkSpaceNoRender(config['Game'])
-        
         
         if self.model_type == "qlearn":
             self.model = QLearn(engine, controller, alpha, gamma, epsilon, distReward, table)
@@ -283,7 +308,7 @@ class Learner():
         elif self.model_type == "sgsarsa":
             self.model = SGSarsa(engine, controller, alpha, gamma, epsilon, distReward)
 
-        
+    # Start the control method, which runs the episodes
     def start(self, episodes, graph):
         self.graph = graph
         if self.rendered:
@@ -294,19 +319,22 @@ class Learner():
         else:
             self.control(episodes)
         
+    # Run whichever algorithm has been set to self.model for the supplied number of episodes
     def control(self, episodes):
         shots_taken_graph = []
         pbar = tqdm(total=episodes)
         for i in range(episodes):
+            # Each 100 episodes, update the progress bar, as doing it more frequently actually negatively effects performance
             if i % 100 is 0:
                 pbar.update(100)
             shots_taken = self.model.runEpisode()
             shots_taken_graph.append(shots_taken)
         pbar.close()
+        # Convert the graph list and the table to binaries and save them
         graphfilename, tablefilename = self.saveListAndTable(shots_taken_graph)
         self.plotGraph(shots_taken_graph, graphfilename)
         
-        
+    # Save a plot of the episodes. If the --graph flag was passed, matplotlib will actually open
     def plotGraph(self, shots, graphfilename):
         eps = range(len(shots))
 
@@ -322,6 +350,7 @@ class Learner():
         if self.graph:
             plt.show()
     
+    #  Save the graph and table
     def saveListAndTable(self, shots_taken_graph):
         dirname = os.path.dirname(os.path.abspath(__file__))
         ts = str(datetime.datetime.now()).split('.')[0].replace(" ", "_").replace(":", "-")
@@ -334,11 +363,8 @@ class Learner():
             print("Saving " + tablefilename + "...")
             self.model.saveTable(tablefilename)
         return graphfilename, tablefilename
-
         
-    def getAction(self):
-        return self.model.getAction(bball_x, bball_y, net_x, net_y)
-        
+    # This generates a default config file. These values were used for all the tests performed.
     def genDefaultCfg(self):
         config = configparser.ConfigParser()
         config['Learner'] = {'alpha': '0.05',
@@ -362,6 +388,7 @@ class Learner():
         with open('config.ini', 'w') as configfile:
             config.write(configfile)
             
+    # This is intended to parse the "Learner" section of the config file
     def parseCfg(self, cfg):
         alpha = float(cfg['alpha'])
         gamma = float(cfg['gamma'])
@@ -382,6 +409,7 @@ if __name__ == "__main__":
         else:
             raise argparse.ArgumentTypeError('Boolean value expected.')
             
+    # Parse any/all of the supplied flags
     parser = argparse.ArgumentParser()
     parser.add_argument("--graph", type=str2bool, nargs='?',
                         const=True, default=False,
@@ -403,6 +431,7 @@ if __name__ == "__main__":
     cfg = args.cfg
     table = args.table
 
+    # Tests were done using a set seed
     random.seed(3)
     learner = Learner(cfg, algo, rendered, table)
     learner.start(eps, graph)
