@@ -126,12 +126,15 @@ class SGSarsa(ApproxModel):
         
 
 class TabModel(Model):
-    def __init__(self, engine, controller, alpha, gamma, epsilon, distReward):
+    def __init__(self, engine, controller, alpha, gamma, epsilon, distReward, table):
         Model.__init__(self, engine, controller, alpha, gamma, epsilon, distReward)
 
-        # Initialize table for all states/actions, initialize to 0
-        #self.table = [[[[0 for x in range(self.action_space)] for x in range(self.state_space[2])] for x in range(self.state_space[1])] for x in range(self.state_space[0])]
-        self.loadTable("2019-11-21_19-58-35_table_sarsa.pkl")
+        # Initialize table for all states/actions, initialize to 0, or load a table
+        if table:
+            self.loadTable(table)
+        else:
+            self.table = [[[[0 for x in range(self.action_space)] for x in range(self.state_space[2])] for x in range(self.state_space[1])] for x in range(self.state_space[0])]
+        
         print("Table dimensions: ", len(self.table), " x ", len(self.table[0]), " x ", len(self.table[0][0]), " x ", len(self.table[0][0][0]))
         
     def getAction(self, state):
@@ -152,8 +155,8 @@ class TabModel(Model):
         self.table = pickle.load(open(filename, "rb"))
         
 class QLearn(TabModel):
-    def __init__(self, engine, controller, alpha, gamma, epsilon, distReward):
-        TabModel.__init__(self, engine, controller, alpha, gamma, epsilon, distReward)
+    def __init__(self, engine, controller, alpha, gamma, epsilon, distReward, table):
+        TabModel.__init__(self, engine, controller, alpha, gamma, epsilon, distReward, table)
         
     def runEpisode(self):
         self.shots_taken = 0
@@ -179,8 +182,8 @@ class QLearn(TabModel):
         return self.shots_taken
                     
 class Sarsa(TabModel):
-    def __init__(self, engine, controller, alpha, gamma, epsilon, distReward):
-        TabModel.__init__(self, engine, controller, alpha, gamma, epsilon, distReward)
+    def __init__(self, engine, controller, alpha, gamma, epsilon, distReward, table):
+        TabModel.__init__(self, engine, controller, alpha, gamma, epsilon, distReward, table)
         
     def runEpisode(self):
         self.shots_taken = 0
@@ -202,7 +205,6 @@ class Sarsa(TabModel):
             
             new_state = self.getState()
             new_action_val, new_actionidx = self.getAction(new_state)
-            print("ACTION VALUE:", new_action_val)
             self.update(reward, actionidx, action_taken_val, new_action_val)
 
             self.state = new_state
@@ -212,8 +214,8 @@ class Sarsa(TabModel):
 
 # This is identical to Sarsa, but instead of using an epsilon-greedy policy, it uses a Boltzmann distribution
 class BoltzSarsa(Sarsa):
-    def __init__(self, engine, controller, alpha, gamma, epsilon, tau, distReward):
-        Sarsa.__init__(self, engine, controller, alpha, gamma, epsilon, distReward)
+    def __init__(self, engine, controller, alpha, gamma, epsilon, tau, distReward, table):
+        Sarsa.__init__(self, engine, controller, alpha, gamma, epsilon, distReward, table)
         # Temperature value
         self.tau = tau
         
@@ -231,8 +233,8 @@ class BoltzSarsa(Sarsa):
         return list(map(lambda x:expWithTemp(x)/sumexp, actions))
         
 class BoltzQLearn(QLearn):
-    def __init__(self, engine, controller, alpha, gamma, epsilon, tau, distReward):
-        QLearn.__init__(self, engine, controller, alpha, gamma, epsilon, distReward)
+    def __init__(self, engine, controller, alpha, gamma, epsilon, tau, distReward, table):
+        QLearn.__init__(self, engine, controller, alpha, gamma, epsilon, distReward, table)
         # Temperature value
         self.tau = tau
         
@@ -248,45 +250,9 @@ class BoltzQLearn(QLearn):
             
         sumexp = sum(map(expWithTemp, actions))
         return list(map(lambda x:expWithTemp(x)/sumexp, actions))
-
-class RankedSarsa(TabModel):
-    def __init__(self, engine, controller, alpha, gamma, epsilon, distReward):
-        TabModel.__init__(self, engine, controller, alpha, gamma, epsilon, distReward)
-        
-    def runEpisode(self):
-        self.shots_taken = 0
-        self.state = self.getState()
-        # Initialize a temporary action list for this episode
-        actionlist = self.getActionsForState(self.state)
-        action_taken_val, actionidx = self.getAction(actionlist)
-        basket_made = False
-        while basket_made is False:
-            action = self.engine.mapActionToVals(actionidx)
-            if action.action_type == "shoot":
-                basket_made, reward = self.doShoot(action)
-                self.shots_taken += 1
-            else:
-                if self.controller:
-                    self.controller.move(action.action_type)
-                else:
-                    self.engine.move(action.action_type)
-                # Reward of -0.1 for movement
-                reward = -0.1
-            
-            # If the attempted shot failed, give it an infinite negative reward so it will not be tried again for this episode
-            actionlist[actionidx] = float("-inf")
-            new_action_val, new_actionidx = self.getAction(actionlist)
-            self.update(reward, actionidx, action_taken_val, new_action_val)
-
-            actionidx = new_actionidx
-            action_taken_val = new_action_val
-        return self.shots_taken
-        
-    def getAction(self, actions):
-        return self.getActionEGreedy(actions)
     
 class Learner():
-    def __init__(self, cfgname, model_type, rendered):
+    def __init__(self, cfgname, model_type, rendered, table):
         if not os.path.isfile(cfgname):
             print(cfgname + " does not exist, creating...")
             self.genDefaultCfg()
@@ -307,15 +273,13 @@ class Learner():
         
         
         if self.model_type == "qlearn":
-            self.model = QLearn(engine, controller, alpha, gamma, epsilon, distReward)
+            self.model = QLearn(engine, controller, alpha, gamma, epsilon, distReward, table)
         elif self.model_type == "sarsa":
-            self.model = Sarsa(engine, controller, alpha, gamma, epsilon, distReward)
+            self.model = Sarsa(engine, controller, alpha, gamma, epsilon, distReward, table)
         elif self.model_type == "bsarsa":
-            self.model = BoltzSarsa(engine, controller, alpha, gamma, epsilon, tau, distReward)
+            self.model = BoltzSarsa(engine, controller, alpha, gamma, epsilon, tau, distReward, table)
         elif self.model_type == "bqlearn":
-            self.model = BoltzQLearn(engine, controller, alpha, gamma, epsilon, tau, distReward)
-        elif self.model_type == "rsarsa":
-            self.model = RankedSarsa(engine, controller, alpha, gamma, epsilon, distReward)
+            self.model = BoltzQLearn(engine, controller, alpha, gamma, epsilon, tau, distReward, table)
         elif self.model_type == "sgsarsa":
             self.model = SGSarsa(engine, controller, alpha, gamma, epsilon, distReward)
 
@@ -423,11 +387,13 @@ if __name__ == "__main__":
                         const=True, default=False,
                         help="Whether or not to display the graph of the results")
     parser.add_argument("--eps", type=int, default=1000, help="Number of episodes")
-    parser.add_argument("--algo", type=str, default="sarsa", choices=["qlearn", "sarsa", "bsarsa", "bqlearn", "rsarsa", "sgsarsa"], help="Which RL algorithm to use")
+    parser.add_argument("--algo", type=str, default="sarsa", choices=["qlearn", "sarsa", "bsarsa", "bqlearn", "sgsarsa"], help="Which RL algorithm to use")
     parser.add_argument("--render", type=str2bool, nargs='?',
                         const=True, default=False,
                         help="Whether or not to render the game")
     parser.add_argument("--cfg", type=str, default="config.ini", help="Name of the config file to load")
+    parser.add_argument("--table", type=str, default=None, help="Name of the table file to load")
+
 
     args = parser.parse_args()
     graph = args.graph
@@ -435,7 +401,8 @@ if __name__ == "__main__":
     algo = args.algo
     rendered = args.render
     cfg = args.cfg
+    table = args.table
 
     random.seed(3)
-    learner = Learner(cfg, algo, rendered)
+    learner = Learner(cfg, algo, rendered, table)
     learner.start(eps, graph)
